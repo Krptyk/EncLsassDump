@@ -48,7 +48,7 @@ This repository contains two programs: one for dumping the `lsass.exe` process m
     decrypt.exe
     ```
 
-3. **Output**: The decrypted dump file `lsass_forked_decrypted.dmp` will be created in the same directory.
+3. **Output**: The decrypted dump file `encDump.txt` will be created in the same directory.
 
 ## Code Explanation
 
@@ -69,7 +69,7 @@ This program:
 1. Opens the encrypted dump file `encDump.txt`.
 2. Reads the encrypted content into memory.
 3. XOR decrypts the content with the key `5`.
-4. Writes the decrypted content to `lsass_forked_decrypted.dmp`.
+4. Writes the decrypted content to `encDump.txt`.
 
 ## License
 
