@@ -34,7 +34,7 @@ This repository contains two programs: one for dumping the `lsass.exe` process m
     sasDum.exe
     ```
 
-3. **Output**: The encrypted dump file `lsass_forked_encrypted.dmp` will be created in the same directory.
+3. **Output**: The encrypted dump file `encDump.txt` will be created in the same directory.
 
 ### Decrypt
 
@@ -61,12 +61,12 @@ This program:
 4. Uses `MiniDumpWriteDump` to dump the memory of the forked process to a temporary file.
 5. Reads the temporary dump file into memory.
 6. XOR encrypts the dump file content with the key `5`.
-7. Writes the encrypted content to `lsass_forked_encrypted.dmp`.
+7. Writes the encrypted content to `encDump.txt`.
 
 ### decrypt.cpp
 
 This program:
-1. Opens the encrypted dump file `lsass_forked_encrypted.dmp`.
+1. Opens the encrypted dump file `encDump.txt`.
 2. Reads the encrypted content into memory.
 3. XOR decrypts the content with the key `5`.
 4. Writes the decrypted content to `lsass_forked_decrypted.dmp`.
