@@ -12,7 +12,7 @@ This repository contains two programs: one for dumping the `lsass.exe` process m
 
 ## Files
 
-- `dump_and_encrypt.cpp`: The program that dumps the `lsass.exe` process and encrypts the dump file.
+- `sasDum.cpp`: The program that dumps the `lsass.exe` process and encrypts the dump file.
 - `decrypt.cpp`: The program that decrypts the encrypted dump file.
 
 ## Requirements
@@ -24,9 +24,9 @@ This repository contains two programs: one for dumping the `lsass.exe` process m
 
 ### sasDump
 
-1. **Compile `dump_and_encrypt.cpp`**:
+1. **Compile `sasDum.cpp`**:
     ```sh
-    cl /EHsc dump_and_encrypt.cpp /link dbghelp.lib
+    cl /EHsc sasDum.cpp /link dbghelp.lib
     ```
 
 2. **Run the executable**:
@@ -52,7 +52,7 @@ This repository contains two programs: one for dumping the `lsass.exe` process m
 
 ## Code Explanation
 
-### dump_and_encrypt.cpp
+### sasDum.cpp
 
 This program:
 1. Finds the PID of the `lsass.exe` process.
