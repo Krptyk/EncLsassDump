@@ -1,7 +1,9 @@
 
 # LSASS Fork and Dump
 
-Note: While the executable is not flagged by Defender, the .dmp file that is written to disk will be flagged. Dump it to a remote location.
+Note: While the executable is not flagged by Defender, the .dmp file that is written to disk will be flagged. Dump it to a remote location. 
+OR
+Use the ForkEncryptDump - this will dump encrypt the .dmp in memory and then push it to disk encrypted so it will not be detected
 
 This project demonstrates how to create a fork of the LSASS process and dump its memory using the Windows API. This can be useful for forensic analysis and security research.
 
