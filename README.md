@@ -1,6 +1,8 @@
 
 # LSASS Process Dumper
 
+Note: While the executable is not flagged by Defender, the .dmp file that is written to disk will be flagged. Dump it to a remote location.
+
 This project demonstrates how to create a fork of the LSASS process and dump its memory using the Windows API. This can be useful for forensic analysis and security research.
 
 ## Features
