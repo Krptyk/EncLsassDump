@@ -1,5 +1,5 @@
 
-# LSASS Process Dumper
+# LSASS Fork and Dump
 
 Note: While the executable is not flagged by Defender, the .dmp file that is written to disk will be flagged. Dump it to a remote location.
 
